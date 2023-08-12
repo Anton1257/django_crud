@@ -9,11 +9,15 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class ProductPositionSerializer(serializers.ModelSerializer):
-    product = ProductSerializer()
-
     class Meta:
         model = StockProduct
-        fields = "__all__"
+        exclude = ["stock"]
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        product_representation = ProductSerializer(instance.product).data
+        representation["product"] = product_representation
+        return representation
 
 
 class StockSerializer(serializers.ModelSerializer):
@@ -27,19 +31,13 @@ class StockSerializer(serializers.ModelSerializer):
         positions_data = validated_data.pop("positions")
         stock = Stock.objects.create(**validated_data)
         for position_data in positions_data:
-            product_data = position_data.pop("product")
-            product = Product.objects.create(**product_data)
-            StockProduct.objects.create(stock=stock, product=product, **position_data)
+            StockProduct.objects.create(stock=stock, **position_data)
         return stock
 
     def update(self, instance, validated_data):
         positions_data = validated_data.pop("positions")
-        instance = super().update(instance, validated_data)
-        instance.positions.all().delete()
+        stock = super().update(instance, validated_data)
+        stock.positions.delete()
         for position_data in positions_data:
-            product_data = position_data.pop("product")
-            product, created = Product.objects.get_or_create(**product_data)
-            StockProduct.objects.create(
-                stock=instance, product=product, **position_data
-            )
-        return instance
+            StockProduct.objects.create(stock=stock, **position_data)
+        return stock
